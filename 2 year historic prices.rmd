@@ -1,0 +1,183 @@
+---
+title: "R Notebook"
+output: html_notebook
+        word_document: default
+---
+
+
+
+```{r}
+setwd("C:\Users\jay\Desktop\Portfolio")
+```
+
+```{r}
+getwd()
+```
+
+```{r}
+Data<-read.csv("Stock prices.csv")
+
+```
+
+```{r}
+ Data[is.na(Data)] <- 0
+summary(Data)
+```
+
+
+
+```{r}
+f = NULL
+files = Data
+for (i in 2:length(files)) {
+  csv = read.csv(files[i])
+  csv = csv[,c("Date","Close")]
+  names(csv) = c("Date",files[i])
+  if (i == 1) f = csv
+  else f = merge(f,csv)
+}
+```
+
+```{r}
+library(pastecs)
+stat.desc(Data)
+```
+
+
+
+```{r}
+for (i in 2:ncol(Data)) {
+  # Price time series of the i-th asset
+  prices =Data[,i] 
+  
+  # Price lagged by 1
+  prices_prev = c(NA,prices[1:(length(prices)-1)]) 
+  
+  # Returns time series
+  returns = (prices-prices_prev)/prices_prev 
+  
+  # Replace the i-th column with returns
+  Data[,i] = returns 
+}
+# Remove the first row with NAs and the Date column
+asset_returns = Data[2:nrow(Data),2:ncol(Data)]
+```
+
+
+```{r}
+portfolio_returns = function(x) {
+  port.returns = 0
+  
+  # Multiplication of the i-th asset by the i-th weight in "x"
+  for (i in 1:length(x)) {
+    port.returns = port.returns + asset_returns[,i] * x[i]
+  }
+  
+  return (port.returns)
+}
+
+```
+
+```{r}
+sharpe = function(x) {
+  port.returns = portfolio_returns(x)
+  
+  return (mean(port.returns)/sqrt(var(port.returns)))
+  
+}
+```
+
+```{r}
+constraint = function(x) {
+ boundary_constr = (sum(x)-1)**2   # "sum x = 1" constraint
+ 
+ for (i in 1:length(x)) {
+  boundary_constr = boundary_constr + 
+     max(c(0,x[i]-1))**2 +  # "x <= 1" constraint
+     max(c(0,-x[i]))**2     # "x >= 0" constraint
+ }
+ 
+ return (boundary_constr)
+}
+```
+
+```{r}
+obj = function(x) {
+  # We want the maximum Sharpe ratio, so we multiply it by
+  # -1 to fit an optimization problem
+  
+  return (-sharpe(x)+100*constraint(x))
+}
+```
+
+```{r}
+library("GA")
+ga_res = ga(
+      # Tell the genetic algorithm that the 
+      # weights are real variables
+      type="real-valued", 
+      
+      # "ga" function performs maximization, so we must
+      # multiply the objective function by -1
+      function(x){-obj(x)}, 
+      
+      # x_i >= 0
+      lower = rep(0,ncol(asset_returns)), 
+      
+      # x_i <= 1
+      upper = rep(1,ncol(asset_returns)), 
+      
+      # Maximum number of iterations 
+      maxiter = 50000, 
+      
+      # If the maximum fitness remains the same for 50
+      # consecutive transactions, stop the algorithm
+      run=50, 
+      
+      # Exploit multi-core properties of your CPU
+      parallel=TRUE,
+      
+      # We want to see the partial results of the process
+      # while it performs
+      monitor=TRUE,
+      
+      # Seed useful for replicating the results
+      seed=1
+)
+```
+
+```{r}
+# Store the resulting weights in a vector
+sol = as.vector(summary(ga_res)$solution)
+```
+
+```{r}
+#optimal_returns = portfolio_returns(sol)
+plot(cumsum(optimal_returns),type="l",lwd=5)
+lines(cumsum(asset_returns[,1]),col="blue")
+lines(cumsum(asset_returns[,2]),col="red")
+lines(cumsum(asset_returns[,3]),col="green")
+lines(cumprod(asset_returns[,4]),col="violet")
+lines(cumsum(asset_returns[,5]),col="peru")
+lines(cumsum(asset_returns[,6]),col="pink")
+legend(0,1.5,legend=c("Weighted portfolio",names(asset_returns)),
+       col = c("black","blue","red","green","violet","peru","pink"),lty=1)
+
+```
+
+
+
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+```{r}
+plot(cars)
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
